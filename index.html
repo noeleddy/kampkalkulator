@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kampkalkulator — Poisson-modell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pitch-dark:#0F3324;
+    --pitch:#1B4332;
+    --pitch-light:#2D6A4F;
+    --chalk:#F7F5EF;
+    --chalk-dim:#DAD5C8;
+    --gold:#D4A24C;
+    --gold-bright:#E8C077;
+    --ink:#12160F;
+    --line:rgba(247,245,239,0.14);
+    --line-strong:rgba(247,245,239,0.28);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--pitch-dark);
+    background-image:
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 90px);
+    color:var(--chalk);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:980px;
+    margin:0 auto;
+    padding:48px 24px 80px;
+  }
+  header{
+    text-align:center;
+    margin-bottom:44px;
+    position:relative;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.28em;
+    text-transform:uppercase;
+    color:var(--gold-bright);
+    margin-bottom:10px;
+  }
+  h1{
+    font-family:'Archivo Black', sans-serif;
+    font-size:clamp(32px, 5.5vw, 54px);
+    line-height:1.02;
+    margin:0 0 12px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    color:var(--chalk-dim);
+    font-size:15px;
+    max-width:560px;
+    margin:0 auto;
+    line-height:1.55;
+  }
+
+  .pitch-line{
+    width:64px;
+    height:3px;
+    background:var(--gold);
+    margin:20px auto 0;
+    border-radius:2px;
+  }
+
+  .lineup{
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    gap:20px;
+    align-items:stretch;
+    margin-bottom:28px;
+  }
+  @media (max-width:720px){
+    .lineup{grid-template-columns:1fr; }
+    .vs-divider{display:none;}
+  }
+
+  .team-card{
+    background:linear-gradient(180deg, var(--pitch) 0%, var(--pitch-dark) 100%);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:26px 24px;
+    position:relative;
+    overflow:hidden;
+  }
+  .team-card::before{
+    content:"";
+    position:absolute;
+    top:0; left:0; right:0;
+    height:4px;
+    background:var(--gold);
+  }
+  .team-card.away::before{ background:var(--chalk-dim); }
+
+  .team-label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--gold-bright);
+    margin-bottom:6px;
+  }
+  .team-card.away .team-label{ color:var(--chalk-dim); }
+
+  .team-name-row{
+    display:flex;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .team-name-input{
+    flex:1;
+    min-width:0;
+    background:rgba(0,0,0,0.22);
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+    color:var(--chalk);
+    font-family:'Oswald', sans-serif;
+    font-size:20px;
+    font-weight:600;
+    letter-spacing:0.01em;
+    padding:10px 12px;
+    outline:none;
+  }
+  .team-name-input::placeholder{
+    color:rgba(218,213,200,0.4);
+    font-size:14px;
+    font-weight:400;
+  }
+  .team-name-input:focus{ border-color:var(--gold); background:rgba(0,0,0,0.32); }
+
+  .analyze-btn{
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    font-weight:500;
+    letter-spacing:0.03em;
+    background:var(--gold);
+    color:var(--ink);
+    border:none;
+    border-radius:8px;
+    padding:0 16px;
+    cursor:pointer;
+    transition:background 0.15s ease, opacity 0.15s ease;
+  }
+  .analyze-btn:hover:not(:disabled){ background:var(--gold-bright); }
+  .analyze-btn:disabled{ opacity:0.5; cursor:default; }
+  .analyze-btn:focus-visible{ outline:2px solid var(--chalk); outline-offset:2px; }
+
+  .field{
+    margin-bottom:16px;
+  }
+  .field:last-child{ margin-bottom:0; }
+
+  .ai-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:20px;
+    min-height:16px;
+  }
+  .ai-status{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.02em;
+    color:rgba(218,213,200,0.5);
+    transition:color 0.15s ease;
+  }
+  .ai-status.busy{ color:var(--gold-bright); }
+  .ai-status.error{ color:#E39B9B; }
+  .ai-status.done{ color:var(--gold-bright); }
+  .ai-reasoning{
+    font-family:'Inter', sans-serif;
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--chalk-dim);
+    background:rgba(0,0,0,0.18);
+    border-left:2px solid var(--gold);
+    padding:9px 12px;
+    border-radius:0 6px 6px 0;
+    margin:16px 0 0;
+    display:none;
+  }
+  .field label{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--chalk-dim);
+    margin-bottom:8px;
+  }
+  .field label span.hint{
+    text-transform:none;
+    letter-spacing:0;
+    color:rgba(218,213,200,0.55);
+    font-size:11px;
+  }
+  .field input[type=number]{
+    width:100%;
+    background:rgba(0,0,0,0.22);
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+    color:var(--chalk);
+    font-family:'JetBrains Mono', monospace;
+    font-size:17px;
+    padding:10px 12px;
+    outline:none;
+    -moz-appearance:textfield;
+  }
+  .field input[type=number]::-webkit-outer-spin-button,
+  .field input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none; margin:0;
+  }
+  .field input:focus{ border-color:var(--gold); background:rgba(0,0,0,0.32); }
+
+  .vs-divider{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'Archivo Black', sans-serif;
+    font-size:20px;
+    color:var(--gold);
+    width:56px;
+  }
+
+  .calc-btn-row{
+    display:flex;
+    justify-content:center;
+    margin:8px 0 40px;
+  }
+  .calc-btn{
+    font-family:'Oswald', sans-serif;
+    font-weight:600;
+    font-size:15px;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    background:var(--gold);
+    color:var(--ink);
+    border:none;
+    border-radius:999px;
+    padding:14px 40px;
+    cursor:pointer;
+    transition:transform 0.15s ease, background 0.15s ease;
+  }
+  .calc-btn:hover{ background:var(--gold-bright); transform:translateY(-1px); }
+  .calc-btn:active{ transform:translateY(0); }
+  .calc-btn:focus-visible{ outline:2px solid var(--chalk); outline-offset:3px; }
+
+  #results{
+    display:none;
+  }
+  #results.show{ display:block; }
+
+  .scoreboard{
+    background:var(--ink);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:32px;
+    margin-bottom:28px;
+    text-align:center;
+  }
+  .scoreboard .eyebrow{ margin-bottom:18px; }
+  .score-row{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:28px;
+  }
+  .score-team{
+    flex:1;
+    max-width:220px;
+  }
+  .score-team .name{
+    font-family:'Oswald', sans-serif;
+    font-size:16px;
+    font-weight:500;
+    color:var(--chalk-dim);
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    margin-bottom:6px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .score-team .xg{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    color:rgba(218,213,200,0.6);
+  }
+  .big-score{
+    font-family:'Archivo Black', sans-serif;
+    font-size:clamp(52px, 9vw, 84px);
+    line-height:1;
+    color:var(--gold-bright);
+    letter-spacing:0.02em;
+  }
+  .score-sep{
+    font-family:'Archivo Black', sans-serif;
+    font-size:clamp(52px, 9vw, 84px);
+    color:rgba(218,213,200,0.3);
+  }
+  .stamped{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--gold);
+    margin-top:18px;
+  }
+
+  .probs{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:14px;
+    margin-bottom:28px;
+  }
+  @media (max-width:600px){ .probs{ grid-template-columns:1fr; } }
+  .prob-card{
+    background:var(--pitch);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:20px;
+    text-align:center;
+  }
+  .prob-card .label{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--chalk-dim);
+    margin-bottom:8px;
+  }
+  .prob-card .value{
+    font-family:'Archivo Black', sans-serif;
+    font-size:32px;
+    color:var(--chalk);
+  }
+  .prob-card.leader{
+    background:linear-gradient(180deg, var(--pitch-light), var(--pitch));
+    border-color:var(--gold);
+  }
+  .prob-card.leader .value{ color:var(--gold-bright); }
+
+  .grid-section{
+    background:var(--pitch);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:28px;
+  }
+  .grid-section h2{
+    font-family:'Oswald', sans-serif;
+    font-size:18px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    margin:0 0 4px;
+  }
+  .grid-section .sub{
+    font-family:'Inter', sans-serif;
+    font-size:13px;
+    color:var(--chalk-dim);
+    margin:0 0 20px;
+  }
+
+  .heatmap-wrap{
+    overflow-x:auto;
+  }
+  table.heatmap{
+    border-collapse:collapse;
+    margin:0 auto;
+    font-family:'JetBrains Mono', monospace;
+  }
+  table.heatmap th{
+    font-size:12px;
+    color:var(--chalk-dim);
+    font-weight:500;
+    padding:6px 10px;
+  }
+  table.heatmap th.corner{
+    font-size:10px;
+    color:rgba(218,213,200,0.5);
+  }
+  table.heatmap td{
+    width:52px;
+    height:40px;
+    text-align:center;
+    font-size:12.5px;
+    color:var(--ink);
+    border-radius:6px;
+    position:relative;
+  }
+  table.heatmap td.axis-label{
+    color:var(--chalk-dim);
+    font-size:12px;
+    background:transparent !important;
+  }
+  table.heatmap td.top-pick{
+    outline:2px solid var(--gold-bright);
+    outline-offset:-2px;
+    font-weight:700;
+  }
+
+  .legend{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:18px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--chalk-dim);
+  }
+  .legend .swatch-row{
+    display:flex;
+    border-radius:4px;
+    overflow:hidden;
+    height:12px;
+    width:120px;
+  }
+  .legend .swatch-row div{ flex:1; }
+
+  footer{
+    text-align:center;
+    margin-top:48px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:rgba(218,213,200,0.45);
+    line-height:1.7;
+  }
+
+  .empty-hint{
+    text-align:center;
+    color:var(--chalk-dim);
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.05em;
+    margin-top:8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Poisson-modell · Kampanalyse</div>
+    <h1>Kampkalkulator</h1>
+    <p>Skriv inn beregnet angreps- og forsvarsscore for to lag. Kalkulatoren regner ut forventet antall mål og sannsynlig sluttresultat med en Poisson-fordeling.</p>
+    <div class="pitch-line"></div>
+  </header>
+
+  <div class="lineup">
+    <div class="team-card home">
+      <div class="team-label">Hjemmelag</div>
+      <div class="team-name-row">
+        <input type="text" class="team-name-input" id="homeName" value="" maxlength="24" placeholder="F.eks Manchester United">
+        <button type="button" class="analyze-btn" id="homeAiBtn">Analyser</button>
+      </div>
+      <div class="ai-row">
+        <span class="ai-status" id="homeAiStatus">Skriv et lagnavn og trykk Analyser</span>
+      </div>
+      <div class="field">
+        <label>Angrepsscore <span class="hint">0–100</span></label>
+        <input type="number" id="homeAttack" value="72" step="1" min="1" max="100">
+      </div>
+      <div class="field">
+        <label>Forsvarsscore <span class="hint">0–100</span></label>
+        <input type="number" id="homeDefence" value="58" step="1" min="1" max="100">
+      </div>
+      <p class="ai-reasoning" id="homeAiReasoning"></p>
+    </div>
+
+    <div class="vs-divider">VS</div>
+
+    <div class="team-card away">
+      <div class="team-label">Bortelag</div>
+      <div class="team-name-row">
+        <input type="text" class="team-name-input" id="awayName" value="" maxlength="24" placeholder="F.eks. Liverpool">
+        <button type="button" class="analyze-btn" id="awayAiBtn">Analyser</button>
+      </div>
+      <div class="ai-row">
+        <span class="ai-status" id="awayAiStatus">Skriv et lagnavn og trykk Analyser</span>
+      </div>
+      <div class="field">
+        <label>Angrepsscore <span class="hint">0–100</span></label>
+        <input type="number" id="awayAttack" value="63" step="1" min="1" max="100">
+      </div>
+      <div class="field">
+        <label>Forsvarsscore <span class="hint">0–100</span></label>
+        <input type="number" id="awayDefence" value="68" step="1" min="1" max="100">
+      </div>
+      <p class="ai-reasoning" id="awayAiReasoning"></p>
+    </div>
+  </div>
+
+  <div class="calc-btn-row">
+    <button class="calc-btn" id="calcBtn">Beregn kamp</button>
+  </div>
+
+  <div id="results">
+
+    <div class="scoreboard">
+      <div class="eyebrow">Forventet resultat</div>
+      <div class="score-row">
+        <div class="score-team">
+          <div class="name" id="sbHomeName">Hjemmelag</div>
+          <div class="xg" id="sbHomeXg">xG 1.60</div>
+        </div>
+        <div class="big-score" id="sbHomeScore">1</div>
+        <div class="score-sep">–</div>
+        <div class="big-score" id="sbAwayScore">1</div>
+        <div class="score-team">
+          <div class="name" id="sbAwayName">Bortelag</div>
+          <div class="xg" id="sbAwayXg">xG 1.30</div>
+        </div>
+      </div>
+      <div class="stamped" id="sbStamp">Mest sannsynlige resultat · 12% sannsynlighet</div>
+    </div>
+
+    <div class="probs">
+      <div class="prob-card" id="pHome">
+        <div class="label" id="pHomeLabel">Hjemmeseier</div>
+        <div class="value" id="pHomeVal">—</div>
+      </div>
+      <div class="prob-card" id="pDraw">
+        <div class="label">Uavgjort</div>
+        <div class="value" id="pDrawVal">—</div>
+      </div>
+      <div class="prob-card" id="pAway">
+        <div class="label" id="pAwayLabel">Borteseier</div>
+        <div class="value" id="pAwayVal">—</div>
+      </div>
+    </div>
+
+    <div class="grid-section">
+      <h2>Resultatmatrise</h2>
+      <p class="sub">Sannsynlighet for hvert eksakte sluttresultat (0–6 mål per lag). Gullring markerer mest sannsynlig resultat.</p>
+      <div class="heatmap-wrap">
+        <table class="heatmap" id="heatmapTable"></table>
+      </div>
+      <div class="legend">
+        <span>Lav</span>
+        <div class="swatch-row" id="legendSwatch"></div>
+        <span>Høy sannsynlighet</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="empty-hint" id="emptyHint">↑ Trykk «Beregn kamp» for å se resultatet</div>
+
+
+</div>
+
+<script>
+function factorial(n){
+  let r = 1;
+  for(let i=2;i<=n;i++) r *= i;
+  return r;
+}
+function poisson(k, lambda){
+  return Math.exp(-lambda) * Math.pow(lambda, k) / factorial(k);
+}
+
+function goldShade(t){
+  // t in [0,1] -> interpolate from dark pitch to bright gold
+  const c1 = [27,67,50];     // pitch
+  const c2 = [232,192,119];  // gold-bright
+  const r = Math.round(c1[0] + (c2[0]-c1[0])*t);
+  const g = Math.round(c1[1] + (c2[1]-c1[1])*t);
+  const b = Math.round(c1[2] + (c2[2]-c1[2])*t);
+  return `rgb(${r},${g},${b})`;
+}
+
+function buildLegend(){
+  const el = document.getElementById('legendSwatch');
+  el.innerHTML = '';
+  for(let i=0;i<10;i++){
+    const d = document.createElement('div');
+    d.style.background = goldShade(i/9);
+    el.appendChild(d);
+  }
+}
+buildLegend();
+
+async function suggestForTeam(side){
+  const nameInput = document.getElementById(side + 'Name');
+  const teamName = nameInput.value.trim();
+  const statusEl = document.getElementById(side + 'AiStatus');
+  const reasoningEl = document.getElementById(side + 'AiReasoning');
+  const btn = document.getElementById(side + 'AiBtn');
+
+  reasoningEl.style.display = 'none';
+  statusEl.classList.remove('busy', 'error', 'done');
+
+  if(!teamName){
+    statusEl.textContent = 'Skriv inn et lagnavn først';
+    statusEl.classList.add('error');
+    return;
+  }
+
+  nameInput.disabled = true;
+  btn.disabled = true;
+  const originalBtnLabel = btn.textContent;
+  btn.textContent = 'Analyserer...';
+  statusEl.textContent = 'Henter statistikk for siste 3 år...';
+  statusEl.classList.add('busy');
+
+  try{
+    const todayStr = new Date().toLocaleDateString('nb-NO', { year: 'numeric', month: 'long', day: 'numeric' });
+    const prompt = `Du er en fotballanalytiker. Dagens dato er ${todayStr}. Vurder det nåværende angreps- og forsvarsnivået til fotballaget "${teamName}", som kan være enten en klubb (f.eks. "Liverpool") eller et landslag (f.eks. "Senegal" eller "Norge"). Basér vurderingen på statistikk fra alle OFFISIELLE kamper laget har spilt de siste 3 årene regnet fra dagens dato. For klubblag betyr dette ligakamper, cupkamper og eventuelle offisielle turneringskamper (f.eks. Champions League). For landslag betyr dette VM/EM-kvalifisering, sluttspillkamper og andre offisielle A-landskamper. Treningskamper og andre uoffisielle kamper skal IKKE tas med i vurderingen.
+
+Bruk websøk for å finne så mye relevant statistikk som mulig over denne perioden: mål scoret og sluppet inn per kamp, xG-tall hvis tilgjengelig, tabellplasseringer sesong for sesong, resultater kamp for kamp der det er mulig, og eventuelle tydelige trender (forbedring/forverring) i angreps- og forsvarsspillet. Legg mest vekt på de nyeste kampene nærmest dagens dato, men bruk hele 3-årsperioden som grunnlag.
+
+VIKTIG - juster for motstandernes styrke: Ikke vurder mål scoret og sluppet inn isolert. Se på KVALITETEN på motstanderne disse resultatene kom mot. Å score mange mål mot svake lag skal vektes lavere enn å score mot sterke lag. Å holde nullen eller slippe inn få mål mot sterke lag skal vektes høyere enn det samme mot svake lag. Vurder derfor laget opp mot styrkenivået i egen liga/turnering og kvaliteten på motstanderne det har møtt, ikke bare rå målstatistikk.
+
+Hvis du etter websøket IKKE klarer å finne noe fotballag som tydelig matcher "${teamName}" (feilstavet, finnes ikke, eller er for tvetydig til å identifisere), skal du IKKE gjette. Sett i stedet "found": false og la "attack"/"defence" være null.
+
+Svar KUN med et gyldig JSON-objekt, ingen innledning, ingen markdown-fences.
+
+Hvis laget ble funnet, bruk dette formatet:
+{"found": true, "attack": <tall 1-100>, "defence": <tall 1-100>, "reasoning": "<én kort setning på norsk som begrunner vurderingen, basert på offisielle kamper siste 3 år og motstandernes styrkenivå>"}
+
+Score-skala: "attack" = hvor sterkt laget er offensivt over perioden, justert for motstandernes styrke (50 = gjennomsnittlig lag i sin liga, 100 = et av de sterkeste angrepene som finnes). "defence" = hvor sterkt laget er defensivt, altså hvor få mål det slipper inn justert for motstandernes styrke (50 = gjennomsnittlig, 100 = et av de beste forsvarene som finnes).
+
+Hvis laget IKKE ble funnet, bruk dette formatet:
+{"found": false, "attack": null, "defence": null, "reasoning": "<kort forklaring på norsk om hvorfor laget ikke ble funnet>"}`;
+
+    async function callClaude(){
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }],
+          tools: [{ type: "web_search_20250305", name: "web_search" }]
+        })
+      });
+
+      let data;
+      try{
+        data = await response.json();
+      } catch(parseErr){
+        throw new Error('Kunne ikke lese svaret fra AI-tjenesten (status ' + response.status + ')');
+      }
+
+      if(!response.ok){
+        const apiMsg = data && data.error && data.error.message ? data.error.message : ('status ' + response.status);
+
+        if(response.status === 401 || response.status === 403){
+          const authErr = new Error('Ikke innlogget eller mangler tilgang.');
+          authErr.isAuthError = true;
+          throw authErr;
+        }
+
+        if(response.status === 429){
+          const rateLimitErr = new Error('Du har brukt opp kvoten din for nå.');
+          rateLimitErr.isRateLimit = true;
+          rateLimitErr.retryAfterSeconds = parseInt(response.headers.get('retry-after'), 10) || null;
+          throw rateLimitErr;
+        }
+
+        throw new Error('API-feil: ' + apiMsg);
+      }
+
+      if(data && data.error){
+        throw new Error('API-feil: ' + (data.error.message || 'ukjent feil'));
+      }
+
+      if(!data || !Array.isArray(data.content)){
+        throw new Error('Uventet svarformat fra AI-tjenesten');
+      }
+
+      const textBlocks = data.content
+        .filter(b => b && b.type === 'text' && typeof b.text === 'string')
+        .map(b => b.text)
+        .join('\n');
+
+      const clean = textBlocks.replace(/```json|```/gi, '').trim();
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+      if(!jsonMatch) throw new Error('Fant ikke gyldig JSON i svaret fra AI-tjenesten');
+
+      return JSON.parse(jsonMatch[0]);
+    }
+
+    let parsed;
+    try{
+      parsed = await callClaude();
+    } catch(firstErr){
+      if(firstErr.isRateLimit || firstErr.isAuthError) throw firstErr;
+      console.warn('Første forsøk feilet, prøver på nytt:', firstErr);
+      statusEl.textContent = 'Prøver på nytt...';
+      parsed = await callClaude();
+    }
+
+    if(parsed.found === false){
+      statusEl.textContent = parsed.reasoning
+        ? 'Fant ikke laget dessverre — ' + parsed.reasoning
+        : 'Fant ikke laget dessverre. Sjekk stavemåten og prøv igjen.';
+      statusEl.classList.remove('busy');
+      statusEl.classList.add('error');
+      return;
+    }
+
+    const attack = Math.round(Math.min(100, Math.max(1, Number(parsed.attack))));
+    const defence = Math.round(Math.min(100, Math.max(1, Number(parsed.defence))));
+    if(Number.isNaN(attack) || Number.isNaN(defence)) throw new Error('Ugyldige tall i svaret');
+
+    document.getElementById(side + 'Attack').value = attack;
+    document.getElementById(side + 'Defence').value = defence;
+
+    statusEl.textContent = 'Oppdatert ✓ angrep ' + attack + ' · forsvar ' + defence;
+    statusEl.classList.remove('busy');
+    statusEl.classList.add('done');
+
+    if(parsed.reasoning){
+      reasoningEl.textContent = parsed.reasoning;
+      reasoningEl.style.display = 'block';
+    }
+  } catch(err){
+    console.error(err);
+
+    if(err && err.isAuthError){
+      statusEl.textContent = 'Du må være innlogget på en Claude-konto for at AI-analysen skal fungere. Logg inn på claude.ai og prøv igjen.';
+      statusEl.classList.remove('busy');
+      statusEl.classList.add('error');
+    } else if(err && err.isRateLimit){
+      let waitMsg = 'Prøv igjen senere.';
+      if(err.retryAfterSeconds){
+        const mins = Math.ceil(err.retryAfterSeconds / 60);
+        if(mins <= 1){
+          waitMsg = 'Prøv igjen om under ett minutt.';
+        } else if(mins < 60){
+          waitMsg = 'Prøv igjen om ca. ' + mins + ' minutter.';
+        } else {
+          const hours = Math.ceil(mins / 60);
+          waitMsg = 'Prøv igjen om ca. ' + hours + ' time' + (hours > 1 ? 'r' : '') + '.';
+        }
+      } else {
+        waitMsg = 'Kvoten fornyes normalt i løpet av noen timer — prøv igjen senere, eller sjekk claude.ai for status på din konto.';
+      }
+      statusEl.textContent = 'Antall forsøk er brukt opp for nå. ' + waitMsg;
+      statusEl.classList.remove('busy');
+      statusEl.classList.add('error');
+    } else {
+      console.error('Teknisk detalj (vises ikke til bruker):', err && err.message);
+      statusEl.textContent = 'Klarte ikke hente statistikk akkurat nå. Prøv igjen om litt.';
+      statusEl.classList.remove('busy');
+      statusEl.classList.add('error');
+    }
+  } finally {
+    nameInput.disabled = false;
+    btn.disabled = false;
+    btn.textContent = originalBtnLabel;
+  }
+}
+
+['home', 'away'].forEach(side => {
+  const nameInput = document.getElementById(side + 'Name');
+  const btn = document.getElementById(side + 'AiBtn');
+
+  const trigger = () => suggestForTeam(side);
+
+  btn.addEventListener('click', trigger);
+
+  nameInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      nameInput.blur();
+      trigger();
+    }
+  });
+});
+
+document.getElementById('calcBtn').addEventListener('click', () => {
+  const homeName = document.getElementById('homeName').value.trim() || 'Hjemmelag';
+  const awayName = document.getElementById('awayName').value.trim() || 'Bortelag';
+  const hA = parseFloat(document.getElementById('homeAttack').value) || 0;
+  const hD = parseFloat(document.getElementById('homeDefence').value) || 0;
+  const aA = parseFloat(document.getElementById('awayAttack').value) || 0;
+  const aD = parseFloat(document.getElementById('awayDefence').value) || 0;
+
+  // Basissnitt: forventet antall mål per lag når angrep og forsvar er like sterke (score 50 vs 50)
+  const BASE_GOALS = 1.35;
+  const clamp = v => Math.min(100, Math.max(1, v)); // unngå divisjon på 0
+  const hAc = clamp(hA), hDc = clamp(hD), aAc = clamp(aA), aDc = clamp(aD);
+
+  const lambdaHome = BASE_GOALS * (hAc / aDc);
+  const lambdaAway = BASE_GOALS * (aAc / hDc);
+
+  const MAXG = 6;
+  const homeProbs = [];
+  const awayProbs = [];
+  for(let k=0;k<=MAXG;k++){
+    homeProbs.push(poisson(k, lambdaHome));
+    awayProbs.push(poisson(k, lambdaAway));
+  }
+
+  // build matrix
+  let matrix = [];
+  let maxP = 0, maxI = 0, maxJ = 0;
+  let pHomeWin = 0, pDraw = 0, pAwayWin = 0;
+  for(let i=0;i<=MAXG;i++){
+    matrix.push([]);
+    for(let j=0;j<=MAXG;j++){
+      const p = homeProbs[i]*awayProbs[j];
+      matrix[i].push(p);
+      if(p > maxP){ maxP = p; maxI = i; maxJ = j; }
+      if(i>j) pHomeWin += p;
+      else if(i===j) pDraw += p;
+      else pAwayWin += p;
+    }
+  }
+  const maxCellForShade = Math.max(...matrix.flat());
+
+  // scoreboard
+  document.getElementById('sbHomeName').textContent = homeName;
+  document.getElementById('sbAwayName').textContent = awayName;
+  document.getElementById('sbHomeXg').textContent = 'xG ' + lambdaHome.toFixed(2);
+  document.getElementById('sbAwayXg').textContent = 'xG ' + lambdaAway.toFixed(2);
+  document.getElementById('sbHomeScore').textContent = maxI;
+  document.getElementById('sbAwayScore').textContent = maxJ;
+  document.getElementById('sbStamp').textContent = `Mest sannsynlige resultat · ${(maxP*100).toFixed(1)}% sannsynlighet`;
+
+  // probability cards
+  document.getElementById('pHomeLabel').textContent = homeName + ' vinner';
+  document.getElementById('pAwayLabel').textContent = awayName + ' vinner';
+  document.getElementById('pHomeVal').textContent = (pHomeWin*100).toFixed(1) + '%';
+  document.getElementById('pDrawVal').textContent = (pDraw*100).toFixed(1) + '%';
+  document.getElementById('pAwayVal').textContent = (pAwayWin*100).toFixed(1) + '%';
+
+  [['pHome',pHomeWin],['pDraw',pDraw],['pAway',pAwayWin]].forEach(([id,val])=>{
+    document.getElementById(id).classList.toggle('leader', val === Math.max(pHomeWin,pDraw,pAwayWin));
+  });
+
+  // heatmap table
+  const table = document.getElementById('heatmapTable');
+  table.innerHTML = '';
+  const headRow = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.className = 'corner';
+  corner.innerHTML = homeName.slice(0,10) + '<br>↓ &nbsp; ' + awayName.slice(0,10) + ' →';
+  headRow.appendChild(corner);
+  for(let j=0;j<=MAXG;j++){
+    const th = document.createElement('th');
+    th.textContent = j;
+    headRow.appendChild(th);
+  }
+  table.appendChild(headRow);
+
+  for(let i=0;i<=MAXG;i++){
+    const row = document.createElement('tr');
+    const rowLabel = document.createElement('td');
+    rowLabel.className = 'axis-label';
+    rowLabel.textContent = i;
+    rowLabel.style.fontWeight = '600';
+    row.appendChild(rowLabel);
+    for(let j=0;j<=MAXG;j++){
+      const td = document.createElement('td');
+      const p = matrix[i][j];
+      const t = maxCellForShade > 0 ? p / maxCellForShade : 0;
+      td.style.background = goldShade(t);
+      td.textContent = (p*100).toFixed(1);
+      if(i===maxI && j===maxJ) td.classList.add('top-pick');
+      row.appendChild(td);
+    }
+    table.appendChild(row);
+  }
+
+  document.getElementById('results').classList.add('show');
+  document.getElementById('emptyHint').style.display = 'none';
+});
+</script>
+</body>
+</html>
